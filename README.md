@@ -18,8 +18,8 @@
 - ошибки в формате `application/problem+json` (RFC 9457) с полем `code`;
 - graceful shutdown по `SIGINT` и `SIGTERM`.
 
-Не сделано: задания со звёздочкой (`Idempotency-Key`, `Dockerfile`).
-Заголовок `Idempotency-Key` сервис принимает, но игнорирует.
+Задание со звёздочкой `Dockerfile` сделано (раздел «Docker» ниже). Не сделано:
+`Idempotency-Key`, заголовок сервис принимает, но игнорирует.
 
 ## Требования
 
@@ -53,6 +53,42 @@ tripgoctl environment stop
 | `make migrate-down` | откатывает все миграции |
 | `make test` | `go test -race ./...` (тестов в этой работе нет, они появятся в работе 2) |
 
+## Docker
+
+`deploy/Dockerfile`: многостадийная сборка. Первая стадия (`golang:1.27.1-alpine`)
+собирает статический бинарь, вторая (`gcr.io/distroless/static-debian12:nonroot`)
+содержит только его. В итоговом образе нет исходников, Go, кэша сборки и shell,
+процесс запускается от пользователя `nonroot` (uid 65532). `.dockerignore` не
+пускает в контекст сборки `.git`, `.env*`, `.tripgo`, тесты, документацию и
+локальные файлы.
+
+Размер итогового образа: **20.8 МБ**.
+
+Сборка из корня репозитория:
+
+```bash
+docker build -f deploy/Dockerfile -t trip-service:lab1 .
+```
+
+Запуск рядом с PostgreSQL из окружения `tripgoctl`. Контейнер подключается к
+Docker-сети `kind`, где живёт узел кластера, а Postgres доступен на его NodePort.
+Из `.env` берём все переменные, а `DATABASE_URL` подменяем: `localhost` внутри
+контейнера означает сам контейнер.
+
+```bash
+NODE_IP=$(docker inspect tripgo-local-control-plane \
+  --format '{{ .NetworkSettings.Networks.kind.IPAddress }}')
+
+docker run --rm --name trip-service --network kind -p 8080:8080 \
+  --env-file .env \
+  -e DATABASE_URL="postgres://tripgo:tripgo@${NODE_IP}:30103/tripgo?sslmode=disable" \
+  trip-service:lab1
+
+curl -sS -i localhost:8080/ready
+```
+
+Миграции контейнер не накатывает, их выполняет `make migrate`.
+
 ## Структура
 
 ```
@@ -63,6 +99,7 @@ internal/txmanager/ менеджер транзакций
 internal/repository/ SQL-запросы (pgx + squirrel)
 internal/httpserver/ хендлеры, роутер, problem+json
 api/                код, сгенерированный из OpenAPI (не правится руками)
+deploy/             Dockerfile
 migrations/         миграции goose
 contracts/          контракты курса (не редактируются)
 ```
