@@ -1,0 +1,12 @@
+.git
+.gitignore
+.tripgo
+.env
+.env.*
+.DS_Store
+bin
+**/*_test.go
+*.md
+contracts
+migrations
+deploy
