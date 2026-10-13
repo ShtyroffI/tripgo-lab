@@ -187,7 +187,7 @@ func toAPITrip(t domain.Trip) api.Trip {
 // maxBodyBytes ограничивает размер тела запроса
 const maxBodyBytes = 1 << 20
 
-// checkRequiredFields нужен, чтобы пропущенное число не стало нулём
+// checkRequiredFields нужен, чтобы пропущенное поле или null не стали нулём
 func checkRequiredFields(raw []byte) error {
 	var body map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &body); err != nil {
@@ -195,7 +195,7 @@ func checkRequiredFields(raw []byte) error {
 	}
 
 	for _, name := range []string{"user_id", "driver_id", "start_point", "end_point", "price"} {
-		if _, ok := body[name]; !ok {
+		if !hasValue(body[name]) {
 			return fmt.Errorf("%s is required", name)
 		}
 	}
@@ -206,12 +206,18 @@ func checkRequiredFields(raw []byte) error {
 			return fmt.Errorf("%s must be an object", name)
 		}
 		for _, field := range []string{"latitude", "longitude"} {
-			if _, ok := point[field]; !ok {
+			if !hasValue(point[field]) {
 				return fmt.Errorf("%s.%s is required", name, field)
 			}
 		}
 	}
 	return nil
+}
+
+// hasValue: ключа нет (raw пустой) или значение null, значит поля нет.
+// Настоящий 0 проходит
+func hasValue(raw json.RawMessage) bool {
+	return len(raw) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
 func validateTripData(body api.TripData) error {

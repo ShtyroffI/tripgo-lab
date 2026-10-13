@@ -79,9 +79,40 @@ func Load() (Config, error) {
 		DatabaseQueryTimeout:    l.duration("DATABASE_QUERY_TIMEOUT"),
 	}
 
+	// Смысл проверяем, только если всё разобралось, иначе нули от ошибок
+	if len(l.errs) == 0 {
+		l.errs = cfg.validate()
+	}
 	if len(l.errs) > 0 {
 		return Config{}, fmt.Errorf("конфигурация: %w", errors.Join(l.errs...))
 	}
 
 	return cfg, nil
+}
+
+func (c Config) validate() []error {
+	var errs []error
+
+	if c.ShutdownTimeout <= 0 {
+		errs = append(errs, errors.New("SHUTDOWN_TIMEOUT: должен быть больше 0"))
+	}
+	if c.DatabaseConnectTimeout <= 0 {
+		errs = append(errs, errors.New("DATABASE_CONNECT_TIMEOUT: должен быть больше 0"))
+	}
+	if c.DatabaseQueryTimeout <= 0 {
+		errs = append(errs, errors.New("DATABASE_QUERY_TIMEOUT: должен быть больше 0"))
+	}
+	if c.DatabaseMaxConnLifetime <= 0 {
+		errs = append(errs, errors.New("DATABASE_MAX_CONN_LIFETIME: должен быть больше 0"))
+	}
+	if c.DatabaseMaxConns < 1 {
+		errs = append(errs, errors.New("DATABASE_MAX_CONNS: должен быть не меньше 1"))
+	}
+	if c.DatabaseMinConns < 0 {
+		errs = append(errs, errors.New("DATABASE_MIN_CONNS: не может быть отрицательным"))
+	}
+	if c.DatabaseMinConns > c.DatabaseMaxConns {
+		errs = append(errs, errors.New("DATABASE_MIN_CONNS: не может быть больше DATABASE_MAX_CONNS"))
+	}
+	return errs
 }
