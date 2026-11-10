@@ -9,8 +9,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+# Версия сборки уходит в атрибут телеметрии service.version:
+# docker build --build-arg VERSION=... (по умолчанию dev)
+ARG VERSION=dev
 # CGO выключен: бинарь статический, ему не нужны системные библиотеки
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/trip-service ./cmd/trip-service
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/trip-service ./cmd/trip-service
 
 # Итоговый образ: только бинарь, без shell и пакетного менеджера
 FROM gcr.io/distroless/static-debian12:nonroot
