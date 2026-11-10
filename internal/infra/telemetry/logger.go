@@ -11,13 +11,8 @@ import (
 // NewLogger: JSON в w (в сервисе stdout), уровень из LOG_LEVEL, в каждой
 // записи поле service. Записи, сделанные внутри спана, получают trace_id и
 // span_id: по ним лог находится в Jaeger и наоборот
-func NewLogger(w io.Writer, level, service string) *slog.Logger {
-	var lvl slog.Level
-	if err := lvl.UnmarshalText([]byte(level)); err != nil {
-		lvl = slog.LevelInfo
-	}
-
-	handler := slog.NewJSONHandler(w, &slog.HandlerOptions{Level: lvl})
+func NewLogger(w io.Writer, level slog.Level, service string) *slog.Logger {
+	handler := slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})
 	return slog.New(traceHandler{Handler: handler}).With("service", service)
 }
 

@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -11,7 +12,7 @@ import (
 
 type Config struct {
 	HTTPAddr        string
-	LogLevel        string
+	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 
 	DatabaseURL             string
@@ -53,6 +54,20 @@ func (l *loader) string(name string) string {
 	return v
 }
 
+// logLevel: debug, info, warn или error (регистр не важен). Неизвестный
+// уровень: ошибка старта, а не тихий откат на info
+func (l *loader) logLevel(name string) slog.Level {
+	v := l.string(name)
+	if v == "" {
+		return slog.LevelInfo
+	}
+	var lvl slog.Level
+	if err := lvl.UnmarshalText([]byte(v)); err != nil {
+		l.errs = append(l.errs, fmt.Errorf("%s: ожидается debug, info, warn или error, задано %q", name, v))
+	}
+	return lvl
+}
+
 func (l *loader) duration(name string) time.Duration {
 	v := os.Getenv(name)
 	if v == "" {
@@ -86,7 +101,7 @@ func Load() (Config, error) {
 
 	cfg := Config{
 		HTTPAddr:        l.string("HTTP_ADDR"),
-		LogLevel:        l.string("LOG_LEVEL"),
+		LogLevel:        l.logLevel("LOG_LEVEL"),
 		ShutdownTimeout: l.duration("SHUTDOWN_TIMEOUT"),
 
 		DatabaseURL:             l.string("DATABASE_URL"),
