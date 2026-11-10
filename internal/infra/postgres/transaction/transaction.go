@@ -1,5 +1,6 @@
-// Транзакция передаётся через context, а не аргументом
-package txmanager
+// Package transaction: менеджер транзакций. Транзакция передаётся через
+// context, а не аргументом, поэтому usecase про pgx не знает
+package transaction
 
 import (
 	"context"
@@ -10,13 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Executor: общее у пула и транзакции, через него ходит репозиторий
 type Executor interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// ctxKey приватный
+// ctxKey приватный, чтобы транзакцию в контекст клал только этот пакет
 type ctxKey struct{}
 
 type Manager struct {
@@ -27,6 +29,8 @@ func New(pool *pgxpool.Pool) *Manager {
 	return &Manager{pool: pool}
 }
 
+// Do выполняет fn в транзакции Read Committed. nil из fn: COMMIT, ошибка
+// или паника: ROLLBACK. Вложенный Do переиспользует уже открытую транзакцию
 func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) error {
 	if _, ok := ctx.Value(ctxKey{}).(pgx.Tx); ok {
 		return fn(ctx)
@@ -61,10 +65,11 @@ func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) er
 	return nil
 }
 
-// ExecutorFromContext возвращает транзакцию из ctx, если её нет - пул
-func ExecutorFromContext(ctx context.Context, pool *pgxpool.Pool) Executor {
+// Executor возвращает транзакцию из ctx, если её нет, то пул: вызов вне Do
+// выполнится отдельным запросом без транзакции
+func (m *Manager) Executor(ctx context.Context) Executor {
 	if tx, ok := ctx.Value(ctxKey{}).(pgx.Tx); ok {
 		return tx
 	}
-	return pool
+	return m.pool
 }

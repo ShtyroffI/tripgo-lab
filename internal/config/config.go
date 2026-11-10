@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -11,7 +12,7 @@ import (
 
 type Config struct {
 	HTTPAddr        string
-	LogLevel        string
+	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 
 	DatabaseURL             string
@@ -20,7 +21,25 @@ type Config struct {
 	DatabaseMaxConnLifetime time.Duration
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
+
+	// Стандартные переменные OpenTelemetry. Эндпоинт, атрибуты ресурса и
+	// сэмплер SDK читает из окружения сам, здесь проверяем, что они заданы
+	OtelServiceName        string
+	OtelExporterEndpoint   string
+	OtelExporterProtocol   string
+	OtelResourceAttributes string
+	OtelTracesSampler      string
+
+	// ServiceVersion не из окружения: версию сборки проставляет main
+	// (go build -ldflags "-X main.version=...")
+	ServiceVersion string
 }
+
+// Протоколы OTLP, которые поддерживает сервис
+const (
+	OtelProtocolHTTP = "http/protobuf"
+	OtelProtocolGRPC = "grpc"
+)
 
 // loader копит ошибки, чтобы показать все проблемы разом
 type loader struct {
@@ -33,6 +52,20 @@ func (l *loader) string(name string) string {
 		l.errs = append(l.errs, fmt.Errorf("%s: переменная не задана", name))
 	}
 	return v
+}
+
+// logLevel: debug, info, warn или error (регистр не важен). Неизвестный
+// уровень: ошибка старта, а не тихий откат на info
+func (l *loader) logLevel(name string) slog.Level {
+	v := l.string(name)
+	if v == "" {
+		return slog.LevelInfo
+	}
+	var lvl slog.Level
+	if err := lvl.UnmarshalText([]byte(v)); err != nil {
+		l.errs = append(l.errs, fmt.Errorf("%s: ожидается debug, info, warn или error, задано %q", name, v))
+	}
+	return lvl
 }
 
 func (l *loader) duration(name string) time.Duration {
@@ -68,7 +101,7 @@ func Load() (Config, error) {
 
 	cfg := Config{
 		HTTPAddr:        l.string("HTTP_ADDR"),
-		LogLevel:        l.string("LOG_LEVEL"),
+		LogLevel:        l.logLevel("LOG_LEVEL"),
 		ShutdownTimeout: l.duration("SHUTDOWN_TIMEOUT"),
 
 		DatabaseURL:             l.string("DATABASE_URL"),
@@ -77,6 +110,12 @@ func Load() (Config, error) {
 		DatabaseMaxConnLifetime: l.duration("DATABASE_MAX_CONN_LIFETIME"),
 		DatabaseConnectTimeout:  l.duration("DATABASE_CONNECT_TIMEOUT"),
 		DatabaseQueryTimeout:    l.duration("DATABASE_QUERY_TIMEOUT"),
+
+		OtelServiceName:        l.string("OTEL_SERVICE_NAME"),
+		OtelExporterEndpoint:   l.string("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		OtelExporterProtocol:   l.string("OTEL_EXPORTER_OTLP_PROTOCOL"),
+		OtelResourceAttributes: l.string("OTEL_RESOURCE_ATTRIBUTES"),
+		OtelTracesSampler:      l.string("OTEL_TRACES_SAMPLER"),
 	}
 
 	// Смысл проверяем, только если всё разобралось, иначе нули от ошибок
@@ -113,6 +152,10 @@ func (c Config) validate() []error {
 	}
 	if c.DatabaseMinConns > c.DatabaseMaxConns {
 		errs = append(errs, errors.New("DATABASE_MIN_CONNS: не может быть больше DATABASE_MAX_CONNS"))
+	}
+	if c.OtelExporterProtocol != OtelProtocolHTTP && c.OtelExporterProtocol != OtelProtocolGRPC {
+		errs = append(errs, fmt.Errorf("OTEL_EXPORTER_OTLP_PROTOCOL: поддерживаются %q и %q, задано %q",
+			OtelProtocolHTTP, OtelProtocolGRPC, c.OtelExporterProtocol))
 	}
 	return errs
 }
