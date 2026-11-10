@@ -20,7 +20,25 @@ type Config struct {
 	DatabaseMaxConnLifetime time.Duration
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
+
+	// Стандартные переменные OpenTelemetry. Эндпоинт, атрибуты ресурса и
+	// сэмплер SDK читает из окружения сам, здесь проверяем, что они заданы
+	OtelServiceName        string
+	OtelExporterEndpoint   string
+	OtelExporterProtocol   string
+	OtelResourceAttributes string
+	OtelTracesSampler      string
+
+	// ServiceVersion не из окружения: версию сборки проставляет main
+	// (go build -ldflags "-X main.version=...")
+	ServiceVersion string
 }
+
+// Протоколы OTLP, которые поддерживает сервис
+const (
+	OtelProtocolHTTP = "http/protobuf"
+	OtelProtocolGRPC = "grpc"
+)
 
 // loader копит ошибки, чтобы показать все проблемы разом
 type loader struct {
@@ -77,6 +95,12 @@ func Load() (Config, error) {
 		DatabaseMaxConnLifetime: l.duration("DATABASE_MAX_CONN_LIFETIME"),
 		DatabaseConnectTimeout:  l.duration("DATABASE_CONNECT_TIMEOUT"),
 		DatabaseQueryTimeout:    l.duration("DATABASE_QUERY_TIMEOUT"),
+
+		OtelServiceName:        l.string("OTEL_SERVICE_NAME"),
+		OtelExporterEndpoint:   l.string("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		OtelExporterProtocol:   l.string("OTEL_EXPORTER_OTLP_PROTOCOL"),
+		OtelResourceAttributes: l.string("OTEL_RESOURCE_ATTRIBUTES"),
+		OtelTracesSampler:      l.string("OTEL_TRACES_SAMPLER"),
 	}
 
 	// Смысл проверяем, только если всё разобралось, иначе нули от ошибок
@@ -113,6 +137,10 @@ func (c Config) validate() []error {
 	}
 	if c.DatabaseMinConns > c.DatabaseMaxConns {
 		errs = append(errs, errors.New("DATABASE_MIN_CONNS: не может быть больше DATABASE_MAX_CONNS"))
+	}
+	if c.OtelExporterProtocol != OtelProtocolHTTP && c.OtelExporterProtocol != OtelProtocolGRPC {
+		errs = append(errs, fmt.Errorf("OTEL_EXPORTER_OTLP_PROTOCOL: поддерживаются %q и %q, задано %q",
+			OtelProtocolHTTP, OtelProtocolGRPC, c.OtelExporterProtocol))
 	}
 	return errs
 }

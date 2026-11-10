@@ -16,13 +16,14 @@ import (
 const historyReason = "trip created"
 
 type Usecase struct {
-	trips tripRepository
-	tx    txManager
-	log   *slog.Logger
+	trips   tripRepository
+	tx      txManager
+	metrics metrics
+	log     *slog.Logger
 }
 
-func New(trips tripRepository, tx txManager, log *slog.Logger) *Usecase {
-	return &Usecase{trips: trips, tx: tx, log: log}
+func New(trips tripRepository, tx txManager, m metrics, log *slog.Logger) *Usecase {
+	return &Usecase{trips: trips, tx: tx, metrics: m, log: log}
 }
 
 // Create проверяет данные в домене и пишет trips и trip_status_history в
@@ -43,6 +44,7 @@ func (u *Usecase) Create(ctx context.Context, in model.CreateTripInput) (trip.Tr
 		return trip.Trip{}, fmt.Errorf("create trip: %w", err)
 	}
 
+	u.metrics.TripCreated(ctx)
 	u.log.InfoContext(ctx, "trip created", "trip_id", t.ID)
 	return t, nil
 }

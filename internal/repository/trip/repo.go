@@ -13,6 +13,9 @@ import (
 const (
 	tripsTable   = "trips"
 	historyTable = "trip_status_history"
+
+	// colStatus используется и в выборке, и в условиях WHERE
+	colStatus = "status"
 )
 
 // pgUniqueViolation: код ошибки PostgreSQL 23505

@@ -30,19 +30,25 @@ func validInput() model.CreateTripInput {
 	}
 }
 
-func newUsecase(t *testing.T) (*create.Usecase, *MocktripRepository, *MocktxManager) {
+// newUsecase: мок метрик без ожиданий, поэтому любой вызов TripCreated,
+// кроме явно ожидаемого в тесте успеха, роняет тест
+func newUsecase(t *testing.T) (*create.Usecase, *MocktripRepository, *MocktxManager, *Mockmetrics) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	repo := NewMocktripRepository(ctrl)
 	tx := NewMocktxManager(ctrl)
-	return create.New(repo, tx, slog.New(slog.DiscardHandler)), repo, tx
+	m := NewMockmetrics(ctrl)
+	return create.New(repo, tx, m, slog.New(slog.DiscardHandler)), repo, tx, m
 }
 
 func TestUsecase_Create_Success(t *testing.T) {
 	t.Parallel()
 
-	uc, repo, tx := newUsecase(t)
+	uc, repo, tx, metrics := newUsecase(t)
 	in := validInput()
+
+	// Счётчик созданных поездок растёт ровно один раз
+	metrics.EXPECT().TripCreated(gomock.Any()).Times(1)
 
 	var saved trip.Trip
 	tx.EXPECT().Do(gomock.Any(), gomock.Any()).DoAndReturn(runTx)
@@ -93,7 +99,7 @@ func TestUsecase_Create_InvalidInput(t *testing.T) {
 			t.Parallel()
 
 			// Моки без EXPECT: любой вызов репозитория или tx провалит тест
-			uc, _, _ := newUsecase(t)
+			uc, _, _, _ := newUsecase(t)
 			in := validInput()
 			tt.patch(&in)
 
@@ -109,7 +115,7 @@ func TestUsecase_Create_InvalidInput(t *testing.T) {
 func TestUsecase_Create_DriverBusy(t *testing.T) {
 	t.Parallel()
 
-	uc, repo, tx := newUsecase(t)
+	uc, repo, tx, _ := newUsecase(t)
 
 	tx.EXPECT().Do(gomock.Any(), gomock.Any()).DoAndReturn(runTx)
 	repo.EXPECT().Save(gomock.Any(), gomock.Any()).Return(trip.ErrDriverBusy)
@@ -142,7 +148,7 @@ func TestUsecase_Create_RepositoryError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			uc, repo, tx := newUsecase(t)
+			uc, repo, tx, _ := newUsecase(t)
 			tx.EXPECT().Do(gomock.Any(), gomock.Any()).DoAndReturn(runTx)
 			tt.setup(repo)
 

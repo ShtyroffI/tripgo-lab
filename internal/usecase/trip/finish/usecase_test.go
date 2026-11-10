@@ -19,13 +19,16 @@ import (
 // runTx выполняет замыкание сразу, чтобы тело транзакции действительно сработало
 func runTx(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 
-func newUsecase(t *testing.T) (*finish.Usecase, *MocktripRepository) {
+// newUsecase: мок метрик без ожиданий, поэтому любой вызов TripCompleted,
+// кроме явно ожидаемого в тесте успеха, роняет тест
+func newUsecase(t *testing.T) (*finish.Usecase, *MocktripRepository, *Mockmetrics) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	repo := NewMocktripRepository(ctrl)
 	tx := NewMocktxManager(ctrl)
 	tx.EXPECT().Do(gomock.Any(), gomock.Any()).DoAndReturn(runTx)
-	return finish.New(repo, tx, slog.New(slog.DiscardHandler)), repo
+	m := NewMockmetrics(ctrl)
+	return finish.New(repo, tx, m, slog.New(slog.DiscardHandler)), repo, m
 }
 
 func activeTrip() trip.Trip {
@@ -42,7 +45,9 @@ func activeTrip() trip.Trip {
 func TestUsecase_Finish_ActiveTrip_Success(t *testing.T) {
 	t.Parallel()
 
-	uc, repo := newUsecase(t)
+	uc, repo, metrics := newUsecase(t)
+	// Счётчик завершённых поездок растёт ровно один раз
+	metrics.EXPECT().TripCompleted(gomock.Any()).Times(1)
 	tr := activeTrip()
 	active := trip.StatusActive
 
@@ -69,7 +74,7 @@ func TestUsecase_Finish_ActiveTrip_Success(t *testing.T) {
 func TestUsecase_Finish_AlreadyCompleted_ErrTripCompleted(t *testing.T) {
 	t.Parallel()
 
-	uc, repo := newUsecase(t)
+	uc, repo, _ := newUsecase(t)
 	tr := activeTrip()
 	tr.Status = trip.StatusCompleted
 	// SaveFinished и AddStatusHistory не ожидаются: gomock упадёт при вызове
@@ -83,7 +88,7 @@ func TestUsecase_Finish_AlreadyCompleted_ErrTripCompleted(t *testing.T) {
 func TestUsecase_Finish_NotFound(t *testing.T) {
 	t.Parallel()
 
-	uc, repo := newUsecase(t)
+	uc, repo, _ := newUsecase(t)
 	id := uuid.New()
 	repo.EXPECT().GetForUpdate(gomock.Any(), id).Return(trip.Trip{}, trip.ErrTripNotFound)
 
@@ -95,7 +100,7 @@ func TestUsecase_Finish_NotFound(t *testing.T) {
 func TestUsecase_Finish_SaveFinishedRace_ErrTripCompleted(t *testing.T) {
 	t.Parallel()
 
-	uc, repo := newUsecase(t)
+	uc, repo, _ := newUsecase(t)
 	tr := activeTrip()
 	repo.EXPECT().GetForUpdate(gomock.Any(), tr.ID).Return(tr, nil)
 	repo.EXPECT().SaveFinished(gomock.Any(), gomock.Any()).Return(trip.ErrTripCompleted)
@@ -132,7 +137,7 @@ func TestUsecase_Finish_RepositoryError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			uc, repo := newUsecase(t)
+			uc, repo, _ := newUsecase(t)
 			tr := activeTrip()
 			tt.setup(repo, tr)
 

@@ -10,7 +10,7 @@ import (
 var tripColumns = []string{
 	"id", "user_id", "driver_id",
 	"start_latitude", "start_longitude", "end_latitude", "end_longitude",
-	"price", "status", "started_at", "finished_at",
+	"price", colStatus, "started_at", "finished_at",
 }
 
 // scanTrip переводит строку trips в доменную модель

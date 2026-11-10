@@ -56,8 +56,12 @@ func (rt routes) Ready(w http.ResponseWriter, r *http.Request) {
 	rt.Service.Ready(w, r)
 }
 
-func New(addr string, h Handlers, log *slog.Logger) *http.Server {
+// New собирает роутер. middlewares подключаются через Use до регистрации
+// маршрутов в переданном порядке (Recover → Tracing → Logging → Metrics):
+// так они работают внутри chi и видят шаблон маршрута
+func New(addr string, h Handlers, log *slog.Logger, middlewares ...func(http.Handler) http.Handler) *http.Server {
 	router := chi.NewRouter()
+	router.Use(middlewares...)
 
 	api.HandlerWithOptions(routes{Handlers: h}, api.ChiServerOptions{
 		BaseRouter: router,

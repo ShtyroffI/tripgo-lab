@@ -283,3 +283,25 @@ func TestConcurrentFinishExactlyOneSucceeds(t *testing.T) {
 	assert.Equal(t, workers-1, completed)
 	assert.Equal(t, 1, countHistory(ctx, t, tr.ID))
 }
+
+// CountActive считает только активные поездки (gauge tripgo.trips.active).
+// Тесты пакета идут последовательно, поэтому сравниваем с замером до вставки
+func TestCountActiveCountsOnlyActiveTrips(t *testing.T) {
+	ctx := testCtx(t)
+
+	before, err := testRepo.CountActive(ctx)
+	require.NoError(t, err)
+
+	active := newTrip(t, uuid.New())
+	finished := newTrip(t, uuid.New())
+	cleanup(t, active.ID, finished.ID)
+
+	require.NoError(t, testRepo.Save(ctx, active))
+	require.NoError(t, testRepo.Save(ctx, finished))
+	require.NoError(t, finished.Finish(time.Now()))
+	require.NoError(t, testRepo.SaveFinished(ctx, finished))
+
+	after, err := testRepo.CountActive(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, before+1, after)
+}

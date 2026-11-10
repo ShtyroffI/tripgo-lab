@@ -15,13 +15,14 @@ import (
 const historyReason = "trip finished"
 
 type Usecase struct {
-	trips tripRepository
-	tx    txManager
-	log   *slog.Logger
+	trips   tripRepository
+	tx      txManager
+	metrics metrics
+	log     *slog.Logger
 }
 
-func New(trips tripRepository, tx txManager, log *slog.Logger) *Usecase {
-	return &Usecase{trips: trips, tx: tx, log: log}
+func New(trips tripRepository, tx txManager, m metrics, log *slog.Logger) *Usecase {
+	return &Usecase{trips: trips, tx: tx, metrics: m, log: log}
 }
 
 // Finish в одной транзакции: блокирует строку (FOR UPDATE), даёт домену
@@ -55,6 +56,7 @@ func (u *Usecase) Finish(ctx context.Context, id uuid.UUID) (trip.Trip, error) {
 		return trip.Trip{}, fmt.Errorf("finish trip: %w", err)
 	}
 
+	u.metrics.TripCompleted(ctx)
 	u.log.InfoContext(ctx, "trip completed", "trip_id", finished.ID)
 	return finished, nil
 }

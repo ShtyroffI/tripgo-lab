@@ -25,6 +25,27 @@ func (r *Repository) GetForUpdate(ctx context.Context, id uuid.UUID) (trip.Trip,
 	return r.get(ctx, id, true)
 }
 
+// CountActive: сколько поездок сейчас в статусе active. Для gauge
+// tripgo.trips.active
+func (r *Repository) CountActive(ctx context.Context) (int64, error) {
+	query, args, err := psql.Select("count(*)").
+		From(tripsTable).
+		Where(sq.Eq{colStatus: trip.StatusActive}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("build count active trips query: %w", err)
+	}
+
+	ctx, cancel := r.withTimeout(ctx)
+	defer cancel()
+
+	var n int64
+	if err := r.executor(ctx).QueryRow(ctx, query, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count active trips: %w", err)
+	}
+	return n, nil
+}
+
 func (r *Repository) get(ctx context.Context, id uuid.UUID, forUpdate bool) (trip.Trip, error) {
 	builder := psql.Select(tripColumns...).
 		From(tripsTable).

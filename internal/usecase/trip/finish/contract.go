@@ -19,4 +19,10 @@ type (
 	txManager interface {
 		Do(ctx context.Context, fn func(ctx context.Context) error) error
 	}
+
+	// metrics: бизнес-счётчик. Usecase не знает про OpenTelemetry, только
+	// про то, что событие надо посчитать
+	metrics interface {
+		TripCompleted(ctx context.Context)
+	}
 )

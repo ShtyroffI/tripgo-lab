@@ -70,10 +70,10 @@ func (r *Repository) AddStatusHistory(ctx context.Context, tripID uuid.UUID, fro
 // второй получит 0 строк и trip.ErrTripCompleted
 func (r *Repository) SaveFinished(ctx context.Context, t trip.Trip) error {
 	query, args, err := psql.Update(tripsTable).
-		Set("status", t.Status).
+		Set(colStatus, t.Status).
 		Set("finished_at", t.FinishedAt).
 		Set("updated_at", sq.Expr("now()")).
-		Where(sq.Eq{"id": t.ID, "status": trip.StatusActive}).
+		Where(sq.Eq{"id": t.ID, colStatus: trip.StatusActive}).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("build finish trip query: %w", err)
