@@ -6,3 +6,6 @@
 bin/
 
 .DS_Store
+
+# Отчёты о покрытии из make test
+coverage*.out
